@@ -1,17 +1,22 @@
 const { client } = require("../config/db");
 const { ObjectId } = require("mongodb");
 
-const database = client.db("medpharmDB");
-
-const specialOfferCollection = database.collection("specialOffers");
-const medicineCollection = database.collection("medicines");
+// নিরাপদ কালেকশন হেল্পার ফাংশন
+const getCollections = () => {
+  const db = client.db("medpharmDB");
+  return {
+    specialOfferCollection: db.collection("specialOffers"),
+    medicineCollection: db.collection("medicines"),
+  };
+};
 
 // ======================================================
-// GET ALL SPECIAL OFFERS
+// 1. GET ALL SPECIAL OFFERS
 // ======================================================
-
 const getAllSpecialOffers = async (req, res) => {
   try {
+    const { specialOfferCollection } = getCollections();
+
     const offers = await specialOfferCollection
       .aggregate([
         {
@@ -34,14 +39,13 @@ const getAllSpecialOffers = async (req, res) => {
       ])
       .toArray();
 
-    res.send({
+    return res.status(200).json({
       success: true,
       offers,
     });
   } catch (error) {
     console.error("Get All Special Offers Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -49,11 +53,11 @@ const getAllSpecialOffers = async (req, res) => {
 };
 
 // ======================================================
-// GET ACTIVE SPECIAL OFFERS
+// 2. GET ACTIVE SPECIAL OFFERS
 // ======================================================
-
 const getActiveSpecialOffers = async (req, res) => {
   try {
+    const { specialOfferCollection } = getCollections();
     const now = new Date();
 
     const offers = await specialOfferCollection
@@ -61,12 +65,8 @@ const getActiveSpecialOffers = async (req, res) => {
         {
           $match: {
             isActive: true,
-            startDate: {
-              $lte: now,
-            },
-            endDate: {
-              $gte: now,
-            },
+            startDate: { $lte: now },
+            endDate: { $gte: now },
           },
         },
         {
@@ -82,9 +82,7 @@ const getActiveSpecialOffers = async (req, res) => {
         },
         {
           $match: {
-            "medicine.stock": {
-              $gt: 0,
-            },
+            "medicine.stock": { $gt: 0 },
           },
         },
         {
@@ -97,11 +95,10 @@ const getActiveSpecialOffers = async (req, res) => {
       .toArray();
 
     const formattedOffers = offers.map((offer) => {
-      const regularPrice = Number(offer.medicine.sellingPrice) || 0;
+      const regularPrice = Number(offer.medicine?.sellingPrice) || 0;
       const offerPrice = Number(offer.offerPrice) || 0;
 
       let discountPercent = 0;
-
       if (regularPrice > 0 && offerPrice < regularPrice) {
         discountPercent = Number(
           (((regularPrice - offerPrice) / regularPrice) * 100).toFixed(2),
@@ -118,28 +115,26 @@ const getActiveSpecialOffers = async (req, res) => {
         endDate: offer.endDate,
         isActive: offer.isActive,
         order: offer.order,
-
         medicine: {
-          _id: offer.medicine._id,
-          medicineName: offer.medicine.medicineName || "",
-          genericName: offer.medicine.genericName || "",
-          company: offer.medicine.company || "",
-          image: offer.medicine.image || "",
-          stock: Number(offer.medicine.stock) || 0,
-          mrpePrice: Number(offer.medicine.mrpePrice) || 0,
-          sellingPrice: Number(offer.medicine.sellingPrice) || 0,
+          _id: offer.medicine?._id,
+          medicineName: offer.medicine?.medicineName || "",
+          genericName: offer.medicine?.genericName || "",
+          company: offer.medicine?.company || "",
+          image: offer.medicine?.image || "",
+          stock: Number(offer.medicine?.stock) || 0,
+          mrpePrice: Number(offer.medicine?.mrpePrice) || 0,
+          sellingPrice: Number(offer.medicine?.sellingPrice) || 0,
         },
       };
     });
 
-    res.send({
+    return res.status(200).json({
       success: true,
       offers: formattedOffers,
     });
   } catch (error) {
     console.error("Get Active Special Offers Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -147,37 +142,30 @@ const getActiveSpecialOffers = async (req, res) => {
 };
 
 // ======================================================
-// ADD SPECIAL OFFER
+// 3. ADD SPECIAL OFFER
 // ======================================================
-
 const addSpecialOffer = async (req, res) => {
   try {
+    const { specialOfferCollection, medicineCollection } = getCollections();
     const { medicineId, offerPrice, startDate, endDate, isActive, order } =
       req.body;
 
-    if (!medicineId) {
-      return res.status(400).send({
+    if (!medicineId || !ObjectId.isValid(medicineId)) {
+      return res.status(400).json({
         success: false,
-        message: "Medicine is required",
-      });
-    }
-
-    if (!ObjectId.isValid(medicineId)) {
-      return res.status(400).send({
-        success: false,
-        message: "Invalid medicine ID",
+        message: "A valid medicine ID is required",
       });
     }
 
     if (offerPrice === undefined || offerPrice === "") {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Offer price is required",
       });
     }
 
     if (!startDate || !endDate) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Start date and end date are required",
       });
@@ -188,7 +176,7 @@ const addSpecialOffer = async (req, res) => {
     });
 
     if (!medicine) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Medicine not found",
       });
@@ -198,21 +186,21 @@ const addSpecialOffer = async (req, res) => {
     const finalOfferPrice = Number(offerPrice);
 
     if (!Number.isFinite(finalOfferPrice) || finalOfferPrice <= 0) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Invalid offer price",
       });
     }
 
     if (regularPrice <= 0) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
-        message: "Medicine regular price is invalid",
+        message: "Medicine regular selling price is invalid",
       });
     }
 
     if (finalOfferPrice >= regularPrice) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Offer price must be less than regular selling price",
       });
@@ -222,14 +210,14 @@ const addSpecialOffer = async (req, res) => {
     const end = new Date(endDate);
 
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
-        message: "Invalid date",
+        message: "Invalid date format",
       });
     }
 
     if (end <= start) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "End date must be after start date",
       });
@@ -238,13 +226,11 @@ const addSpecialOffer = async (req, res) => {
     const existingOffer = await specialOfferCollection.findOne({
       medicineId: new ObjectId(medicineId),
       isActive: true,
-      endDate: {
-        $gte: new Date(),
-      },
+      endDate: { $gte: new Date() },
     });
 
     if (existingOffer) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "This medicine already has an active special offer",
       });
@@ -268,15 +254,14 @@ const addSpecialOffer = async (req, res) => {
 
     const result = await specialOfferCollection.insertOne(newOffer);
 
-    res.status(201).send({
+    return res.status(201).json({
       success: true,
       insertedId: result.insertedId,
       message: "Special offer added successfully",
     });
   } catch (error) {
     console.error("Add Special Offer Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -284,15 +269,15 @@ const addSpecialOffer = async (req, res) => {
 };
 
 // ======================================================
-// UPDATE SPECIAL OFFER
+// 4. UPDATE SPECIAL OFFER
 // ======================================================
-
 const updateSpecialOffer = async (req, res) => {
   try {
+    const { specialOfferCollection, medicineCollection } = getCollections();
     const id = req.params.id;
 
     if (!ObjectId.isValid(id)) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Invalid offer ID",
       });
@@ -302,7 +287,7 @@ const updateSpecialOffer = async (req, res) => {
       req.body;
 
     if (!medicineId || !ObjectId.isValid(medicineId)) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Invalid medicine ID",
       });
@@ -313,7 +298,7 @@ const updateSpecialOffer = async (req, res) => {
     });
 
     if (!medicine) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Medicine not found",
       });
@@ -323,14 +308,14 @@ const updateSpecialOffer = async (req, res) => {
     const finalOfferPrice = Number(offerPrice);
 
     if (!Number.isFinite(finalOfferPrice) || finalOfferPrice <= 0) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Invalid offer price",
       });
     }
 
     if (finalOfferPrice >= regularPrice) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Offer price must be less than regular selling price",
       });
@@ -340,14 +325,14 @@ const updateSpecialOffer = async (req, res) => {
     const end = new Date(endDate);
 
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
-        message: "Invalid date",
+        message: "Invalid date format",
       });
     }
 
     if (end <= start) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "End date must be after start date",
       });
@@ -369,29 +354,24 @@ const updateSpecialOffer = async (req, res) => {
     };
 
     const result = await specialOfferCollection.updateOne(
-      {
-        _id: new ObjectId(id),
-      },
-      {
-        $set: updateData,
-      },
+      { _id: new ObjectId(id) },
+      { $set: updateData },
     );
 
     if (result.matchedCount === 0) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Special offer not found",
       });
     }
 
-    res.send({
+    return res.status(200).json({
       success: true,
       message: "Special offer updated successfully",
     });
   } catch (error) {
     console.error("Update Special Offer Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -399,15 +379,15 @@ const updateSpecialOffer = async (req, res) => {
 };
 
 // ======================================================
-// DELETE SPECIAL OFFER
+// 5. DELETE SPECIAL OFFER
 // ======================================================
-
 const deleteSpecialOffer = async (req, res) => {
   try {
+    const { specialOfferCollection } = getCollections();
     const id = req.params.id;
 
     if (!ObjectId.isValid(id)) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Invalid offer ID",
       });
@@ -418,20 +398,19 @@ const deleteSpecialOffer = async (req, res) => {
     });
 
     if (result.deletedCount === 0) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Special offer not found",
       });
     }
 
-    res.send({
+    return res.status(200).json({
       success: true,
       message: "Special offer deleted successfully",
     });
   } catch (error) {
     console.error("Delete Special Offer Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -439,15 +418,15 @@ const deleteSpecialOffer = async (req, res) => {
 };
 
 // ======================================================
-// TOGGLE SPECIAL OFFER
+// 6. TOGGLE SPECIAL OFFER
 // ======================================================
-
 const toggleSpecialOffer = async (req, res) => {
   try {
+    const { specialOfferCollection } = getCollections();
     const id = req.params.id;
 
     if (!ObjectId.isValid(id)) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Invalid offer ID",
       });
@@ -458,7 +437,7 @@ const toggleSpecialOffer = async (req, res) => {
     });
 
     if (!offer) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Special offer not found",
       });
@@ -467,9 +446,7 @@ const toggleSpecialOffer = async (req, res) => {
     const newStatus = !offer.isActive;
 
     await specialOfferCollection.updateOne(
-      {
-        _id: new ObjectId(id),
-      },
+      { _id: new ObjectId(id) },
       {
         $set: {
           isActive: newStatus,
@@ -478,7 +455,7 @@ const toggleSpecialOffer = async (req, res) => {
       },
     );
 
-    res.send({
+    return res.status(200).json({
       success: true,
       message: newStatus
         ? "Special offer activated"
@@ -487,8 +464,7 @@ const toggleSpecialOffer = async (req, res) => {
     });
   } catch (error) {
     console.error("Toggle Special Offer Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });

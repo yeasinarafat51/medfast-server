@@ -1,16 +1,17 @@
 const { client } = require("../config/db");
 const { ObjectId } = require("mongodb");
 
-const database = client.db("medpharmDB");
-
-const sliderCollection = database.collection("sliders");
+// নিরাপদ কালেকশন হেল্পার ফাংশন
+const getSliderCollection = () => {
+  return client.db("medpharmDB").collection("sliders");
+};
 
 // =====================================================
-// ADD SLIDER
+// 1. ADD SLIDER
 // =====================================================
-
 const addSlider = async (req, res) => {
   try {
+    const sliderCollection = getSliderCollection();
     const {
       title,
       description,
@@ -27,26 +28,22 @@ const addSlider = async (req, res) => {
       image: image?.trim() || "",
       buttonText: buttonText?.trim() || "Shop Now",
       buttonLink: buttonLink?.trim() || "/all-medicines",
-
       isActive: isActive !== false,
-
       order: Number(order) || 0,
-
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
     const result = await sliderCollection.insertOne(slider);
 
-    res.status(201).send({
+    return res.status(201).json({
       success: true,
       message: "Slider added successfully",
       insertedId: result.insertedId,
     });
   } catch (error) {
     console.error("Add Slider Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -54,11 +51,11 @@ const addSlider = async (req, res) => {
 };
 
 // =====================================================
-// GET ALL SLIDERS
+// 2. GET ALL SLIDERS
 // =====================================================
-
 const getSliders = async (req, res) => {
   try {
+    const sliderCollection = getSliderCollection();
     const sliders = await sliderCollection
       .find({})
       .sort({
@@ -67,14 +64,13 @@ const getSliders = async (req, res) => {
       })
       .toArray();
 
-    res.send({
+    return res.status(200).json({
       success: true,
       sliders,
     });
   } catch (error) {
     console.error("Get Sliders Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -82,11 +78,11 @@ const getSliders = async (req, res) => {
 };
 
 // =====================================================
-// GET ACTIVE SLIDERS
+// 3. GET ACTIVE SLIDERS
 // =====================================================
-
 const getActiveSliders = async (req, res) => {
   try {
+    const sliderCollection = getSliderCollection();
     const sliders = await sliderCollection
       .find({
         isActive: true,
@@ -97,14 +93,13 @@ const getActiveSliders = async (req, res) => {
       })
       .toArray();
 
-    res.send({
+    return res.status(200).json({
       success: true,
       sliders,
     });
   } catch (error) {
     console.error("Get Active Sliders Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -112,15 +107,15 @@ const getActiveSliders = async (req, res) => {
 };
 
 // =====================================================
-// GET SINGLE SLIDER
+// 4. GET SINGLE SLIDER
 // =====================================================
-
 const getSingleSlider = async (req, res) => {
   try {
+    const sliderCollection = getSliderCollection();
     const id = req.params.id;
 
     if (!ObjectId.isValid(id)) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Invalid slider ID",
       });
@@ -131,20 +126,19 @@ const getSingleSlider = async (req, res) => {
     });
 
     if (!slider) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Slider not found",
       });
     }
 
-    res.send({
+    return res.status(200).json({
       success: true,
       slider,
     });
   } catch (error) {
     console.error("Get Single Slider Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -152,15 +146,15 @@ const getSingleSlider = async (req, res) => {
 };
 
 // =====================================================
-// UPDATE SLIDER
+// 5. UPDATE SLIDER
 // =====================================================
-
 const updateSlider = async (req, res) => {
   try {
+    const sliderCollection = getSliderCollection();
     const id = req.params.id;
 
     if (!ObjectId.isValid(id)) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Invalid slider ID",
       });
@@ -188,29 +182,24 @@ const updateSlider = async (req, res) => {
     };
 
     const result = await sliderCollection.updateOne(
-      {
-        _id: new ObjectId(id),
-      },
-      {
-        $set: updateData,
-      },
+      { _id: new ObjectId(id) },
+      { $set: updateData },
     );
 
     if (result.matchedCount === 0) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Slider not found",
       });
     }
 
-    res.send({
+    return res.status(200).json({
       success: true,
       message: "Slider updated successfully",
     });
   } catch (error) {
     console.error("Update Slider Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -218,15 +207,15 @@ const updateSlider = async (req, res) => {
 };
 
 // =====================================================
-// TOGGLE ACTIVE / INACTIVE
+// 6. TOGGLE ACTIVE / INACTIVE
 // =====================================================
-
 const toggleSlider = async (req, res) => {
   try {
+    const sliderCollection = getSliderCollection();
     const id = req.params.id;
 
     if (!ObjectId.isValid(id)) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Invalid slider ID",
       });
@@ -237,7 +226,7 @@ const toggleSlider = async (req, res) => {
     });
 
     if (!slider) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Slider not found",
       });
@@ -246,9 +235,7 @@ const toggleSlider = async (req, res) => {
     const newStatus = !slider.isActive;
 
     const result = await sliderCollection.updateOne(
-      {
-        _id: new ObjectId(id),
-      },
+      { _id: new ObjectId(id) },
       {
         $set: {
           isActive: newStatus,
@@ -257,7 +244,7 @@ const toggleSlider = async (req, res) => {
       },
     );
 
-    res.send({
+    return res.status(200).json({
       success: true,
       message: `Slider ${newStatus ? "activated" : "deactivated"} successfully`,
       isActive: newStatus,
@@ -265,8 +252,7 @@ const toggleSlider = async (req, res) => {
     });
   } catch (error) {
     console.error("Toggle Slider Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -274,15 +260,15 @@ const toggleSlider = async (req, res) => {
 };
 
 // =====================================================
-// DELETE SLIDER
+// 7. DELETE SLIDER
 // =====================================================
-
 const deleteSlider = async (req, res) => {
   try {
+    const sliderCollection = getSliderCollection();
     const id = req.params.id;
 
     if (!ObjectId.isValid(id)) {
-      return res.status(400).send({
+      return res.status(400).json({
         success: false,
         message: "Invalid slider ID",
       });
@@ -293,20 +279,19 @@ const deleteSlider = async (req, res) => {
     });
 
     if (result.deletedCount === 0) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Slider not found",
       });
     }
 
-    res.send({
+    return res.status(200).json({
       success: true,
       message: "Slider deleted successfully",
     });
   } catch (error) {
     console.error("Delete Slider Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -316,7 +301,6 @@ const deleteSlider = async (req, res) => {
 // =====================================================
 // EXPORT
 // =====================================================
-
 module.exports = {
   addSlider,
   getSliders,

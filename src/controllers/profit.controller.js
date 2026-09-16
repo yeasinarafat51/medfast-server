@@ -1,12 +1,17 @@
 const { client } = require("../config/db");
 
-const database = client.db("medpharmDB");
-
-const orderCollection = database.collection("orders");
-const medicineCollection = database.collection("medicines");
+// নিরাপদ কালেকশন হেল্পার ফাংশন
+const getCollections = () => {
+  const db = client.db("medpharmDB");
+  return {
+    orderCollection: db.collection("orders"),
+    medicineCollection: db.collection("medicines"),
+  };
+};
 
 const getProfitReport = async (req, res) => {
   try {
+    const { orderCollection, medicineCollection } = getCollections();
     const { from, to, search } = req.query;
 
     const query = {
@@ -25,15 +30,19 @@ const getProfitReport = async (req, res) => {
       }
     }
 
-    const orders = await orderCollection
-      .find(query)
-      .sort({ orderDate: -1 })
-      .toArray();
+    // সমান্তরালে দ্রুত ফেচ করা (Promise.all)
+    const [orders, medicines] = await Promise.all([
+      orderCollection
+        .find(query)
+        .sort({ orderDate: -1 })
+        .limit(1000) // মেমরি সেফটি লিমিট
+        .toArray(),
+      medicineCollection
+        .find({}, { projection: { _id: 1, purchasePrice: 1 } }) // শুধু প্রয়োজনীয় ফিল্ড
+        .toArray(),
+    ]);
 
     const medicineMap = new Map();
-
-    const medicines = await medicineCollection.find({}).toArray();
-
     medicines.forEach((medicine) => {
       medicineMap.set(
         String(medicine._id),
@@ -57,7 +66,6 @@ const getProfitReport = async (req, res) => {
         const medicineId = String(item.medicineId || "");
         const medicineName =
           item.medicineName || item.name || "Unknown Medicine";
-
         const company = item.company || "N/A";
         const quantity = Number(item.quantity || 0);
 
@@ -66,19 +74,15 @@ const getProfitReport = async (req, res) => {
         }
 
         let purchasePrice = Number(item.purchasePrice);
-
         if (!Number.isFinite(purchasePrice)) {
           purchasePrice = medicineMap.get(medicineId) || 0;
         }
 
         const sellingPrice = Number(item.unitPrice || item.sellingPrice || 0);
-
         const purchaseAmount = purchasePrice * quantity;
-
         const salesAmount = Number(
           item.totalPrice || item.total || sellingPrice * quantity,
         );
-
         const profit = salesAmount - purchaseAmount;
 
         totalPurchaseAmount += purchaseAmount;
@@ -101,7 +105,6 @@ const getProfitReport = async (req, res) => {
         }
 
         const report = medicineReports.get(medicineId);
-
         report.soldQuantity += quantity;
         report.purchaseAmount += purchaseAmount;
         report.salesAmount += salesAmount;
@@ -113,7 +116,6 @@ const getProfitReport = async (req, res) => {
 
     if (search) {
       const searchText = search.trim().toLowerCase();
-
       reports = reports.filter((item) => {
         return (
           item.medicineName.toLowerCase().includes(searchText) ||
@@ -124,7 +126,7 @@ const getProfitReport = async (req, res) => {
 
     reports.sort((a, b) => b.profit - a.profit);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       summary: {
         totalPurchaseAmount,
@@ -137,8 +139,7 @@ const getProfitReport = async (req, res) => {
     });
   } catch (error) {
     console.error("Profit Report Error:", error);
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to load profit report.",
     });
