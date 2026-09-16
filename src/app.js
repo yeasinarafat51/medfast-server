@@ -15,9 +15,9 @@ const profitRoutes = require("./routes/profit.routes");
 
 const app = express();
 
-// =========================
-// CORS (নিরাপদ ও ডায়নামিক)
-// =========================
+// =======================================================
+// 1. BULLETPROOF CORS HEADERS (Vercel Serverless Optimized)
+// =======================================================
 const allowedOrigins = [
   "https://novacarebd.com",
   "https://www.novacarebd.com",
@@ -25,39 +25,52 @@ const allowedOrigins = [
   "http://localhost:3000",
 ];
 
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (allowedOrigins.includes(origin) || !origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  } else if (origin.endsWith(".vercel.app") || origin.includes("run.app")) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "https://novacarebd.com");
+  }
+
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization, Cookie",
+  );
+
+  // ব্রাউজারের প্রি-ফ্লাইট OPTIONS রিকোয়েস্টে সাথে সাথে 200 OK রিটার্ন করা
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  next();
+});
+
+// লাইব্রেরি CORS ও ব্যাকআপ হিসেবে চালু রাখা
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // মোবাইল অ্যাপ বা Postman থেকে কল আসলে origin থাকে না
-      if (!origin) return callback(null, true);
-
-      // নির্দিষ্ট ডোমেইন অথবা যেকোনো vercel.app ডোমেইন এলাও করা
-      if (
-        allowedOrigins.includes(origin) ||
-        origin.endsWith(".vercel.app") ||
-        origin.includes("run.app")
-      ) {
-        return callback(null, true);
-      }
-
-      // অন্যান্য ক্ষেত্রেও যাতে ব্লক হয়ে হ্যাং না থাকে
-      return callback(null, true);
-    },
+    origin: (origin, callback) => callback(null, true),
     credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
   }),
 );
 
-// =========================
-// Middleware
-// =========================
+// =======================================================
+// 2. BODY PARSERS
+// =======================================================
 app.use(express.json());
 app.use(cookieParser());
 
-// =========================
-// Health Check (Root)
-// =========================
+// =======================================================
+// 3. ROOT HEALTH CHECK
+// =======================================================
 app.get("/", (req, res) => {
   return res.status(200).json({
     success: true,
@@ -66,9 +79,9 @@ app.get("/", (req, res) => {
   });
 });
 
-// =========================
-// Routes
-// =========================
+// =======================================================
+// 4. API ROUTES
+// =======================================================
 app.use("/api/users", userRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/medicines", medicineRoutes);
@@ -80,9 +93,9 @@ app.use("/api/sliders", sliderRoutes);
 app.use("/api/special-offers", specialOfferRoutes);
 app.use("/api/profit", profitRoutes);
 
-// =========================
-// 404 Route Handler
-// =========================
+// =======================================================
+// 5. 404 HANDLER
+// =======================================================
 app.use((req, res) => {
   return res.status(404).json({
     success: false,
@@ -90,9 +103,9 @@ app.use((req, res) => {
   });
 });
 
-// =========================
-// Error Handler
-// =========================
+// =======================================================
+// 6. GLOBAL ERROR HANDLER
+// =======================================================
 app.use((err, req, res, next) => {
   console.error("❌ Express Global Error:", err);
   return res.status(500).json({
