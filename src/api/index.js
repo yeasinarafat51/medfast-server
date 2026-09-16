@@ -1,20 +1,21 @@
 require("dotenv").config();
+const app = require("../src/app");
+const connectDB = require("../src/config/db");
 
-const app = require("../app");
-const connectDB = require("../config/db");
-
-module.exports = async (req, res) => {
+// ⚡ Vercel Serverless Middleware: প্রতিটি রিকোয়েস্টের আগে কানেকশন নিশ্চিত করা
+app.use(async (req, res, next) => {
   try {
     await connectDB();
-
-    return app(req, res);
-  } catch (error) {
-    console.error("❌ API ERROR:", error);
-
-    return res.status(500).json({
+    next();
+  } catch (err) {
+    console.error("Vercel DB Connect Error:", err.message);
+    return res.status(503).json({
       success: false,
-      message: "Server error",
-      error: error.message,
+      message: "Database connection failed",
+      error: err.message,
     });
   }
-};
+});
+
+// Vercel Serverless-এর আসল এক্সপোর্ট নিয়ম (কোনো async র্যাপার লাগবে না)
+module.exports = app;

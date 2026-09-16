@@ -3,7 +3,7 @@ const { MongoClient, ServerApiVersion } = require("mongodb");
 const uri = process.env.MONGODB_URI;
 
 if (!uri) {
-  throw new Error("MONGODB_URI is not defined in environment variables");
+  console.error("❌ MONGODB_URI is not defined in environment variables!");
 }
 
 let cachedClient = global._mongoClient;
@@ -18,8 +18,8 @@ if (!cachedClient) {
     },
     maxPoolSize: 10,
     minPoolSize: 0,
-    connectTimeoutMS: 5000,
-    serverSelectionTimeoutMS: 5000,
+    connectTimeoutMS: 15000, // পর্যাপ্ত সময় দেওয়া হয়েছে
+    serverSelectionTimeoutMS: 15000, // কোল্ড স্টার্টে হ্যান্ডশেক ফেইল হবে না
     maxIdleTimeMS: 30000,
   });
   global._mongoClient = cachedClient;
@@ -33,13 +33,13 @@ async function connectDB() {
   cachedPromise = cachedClient
     .connect()
     .then((client) => {
-      console.log("✅ MongoDB Connected (Vercel Serverless Cached)");
+      console.log("✅ MongoDB Connected (Vercel Cached)");
       return client;
     })
     .catch((error) => {
       cachedPromise = null;
       global._mongoConnectionPromise = null;
-      console.error("❌ MongoDB Error:", error.message);
+      console.error("❌ MongoDB Connection Error:", error.message);
       throw error;
     });
 
@@ -47,7 +47,6 @@ async function connectDB() {
   return cachedPromise;
 }
 
-// কালেকশন পাওয়ার নিরাপদ হেল্পার ফাংশন
 function getCollection(collectionName) {
   return cachedClient.db("medpharmDB").collection(collectionName);
 }
