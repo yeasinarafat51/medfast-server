@@ -3,49 +3,55 @@ const { MongoClient, ServerApiVersion } = require("mongodb");
 const uri = process.env.MONGODB_URI;
 
 if (!uri) {
-  throw new Error("MONGODB_URI is not defined");
+  throw new Error("MONGODB_URI is not defined in environment variables");
 }
 
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
+let cachedClient = global._mongoClient;
+let cachedPromise = global._mongoConnectionPromise;
 
-  maxPoolSize: 10,
-  minPoolSize: 0,
-
-  connectTimeoutMS: 10000,
-  serverSelectionTimeoutMS: 10000,
-
-  maxIdleTimeMS: 60000,
-});
-
-let connectionPromise = null;
+if (!cachedClient) {
+  cachedClient = new MongoClient(uri, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    },
+    maxPoolSize: 10,
+    minPoolSize: 0,
+    connectTimeoutMS: 5000,
+    serverSelectionTimeoutMS: 5000,
+    maxIdleTimeMS: 30000,
+  });
+  global._mongoClient = cachedClient;
+}
 
 async function connectDB() {
-  if (!connectionPromise) {
-    connectionPromise = client
-      .connect()
-      .then(async () => {
-        await client.db("admin").command({ ping: 1 });
-
-        console.log("✅ MongoDB Connected");
-
-        return client;
-      })
-      .catch((error) => {
-        connectionPromise = null;
-
-        console.error("❌ MongoDB Error:", error.message);
-
-        throw error;
-      });
+  if (cachedPromise) {
+    return cachedPromise;
   }
 
-  return connectionPromise;
+  cachedPromise = cachedClient
+    .connect()
+    .then((client) => {
+      console.log("✅ MongoDB Connected (Vercel Serverless Cached)");
+      return client;
+    })
+    .catch((error) => {
+      cachedPromise = null;
+      global._mongoConnectionPromise = null;
+      console.error("❌ MongoDB Error:", error.message);
+      throw error;
+    });
+
+  global._mongoConnectionPromise = cachedPromise;
+  return cachedPromise;
+}
+
+// কালেকশন পাওয়ার নিরাপদ হেল্পার ফাংশন
+function getCollection(collectionName) {
+  return cachedClient.db("medpharmDB").collection(collectionName);
 }
 
 module.exports = connectDB;
-module.exports.client = client;
+module.exports.client = cachedClient;
+module.exports.getCollection = getCollection;

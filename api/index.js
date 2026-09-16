@@ -1,24 +1,17 @@
 require("dotenv").config();
-
 const app = require("../src/app");
 const connectDB = require("../src/config/db");
 
-let connected = false;
-
 module.exports = async (req, res) => {
   try {
-    if (!connected) {
-      await connectDB();
-      connected = true;
-    }
-
+    // প্রতি রিকোয়েস্টে কানেকশন রেডি আছে কিনা নিশ্চিত করা (ক্যাশ থাকায় দেরি হবে না)
+    await connectDB();
     return app(req, res);
   } catch (err) {
-    console.error(err);
-
+    console.error("Serverless Entry Error:", err);
     return res.status(500).json({
       success: false,
-      message: err.message,
+      message: "Database connection failed: " + err.message,
     });
   }
 };

@@ -1,22 +1,26 @@
 const { client } = require("../config/db");
-
-const database = client.db("medpharmDB");
 const { ObjectId } = require("mongodb");
 
-const medicineCollection = database.collection("medicines");
+// নিরাপদভাবে কালেকশন পাওয়ার হেল্পার ফাংশন
+const getMedicineCollection = () => {
+  return client.db("medpharmDB").collection("medicines");
+};
 
+// ==========================================
+// 1. ADD MEDICINE
+// ==========================================
 const addMedicine = async (req, res) => {
   try {
-    const medicine = req.body;
+    const medicineCollection = getMedicineCollection();
+    const medicine = { ...req.body };
 
     // Convert to Number
-    medicine.purchasePrice = Number(medicine.purchasePrice);
-    medicine.profitPercent = Number(medicine.profitPercent);
-    medicine.mrpePrice = Number(medicine.mrpePrice);
-    medicine.bikriPercent = Number(medicine.bikriPercent);
-
-    medicine.stock = Number(medicine.stock);
-    medicine.boxQuantity = Number(medicine.boxQuantity);
+    medicine.purchasePrice = Number(medicine.purchasePrice) || 0;
+    medicine.profitPercent = Number(medicine.profitPercent) || 0;
+    medicine.mrpePrice = Number(medicine.mrpePrice) || 0;
+    medicine.bikriPercent = Number(medicine.bikriPercent) || 0;
+    medicine.stock = Number(medicine.stock) || 0;
+    medicine.boxQuantity = Number(medicine.boxQuantity) || 0;
 
     // Calculate Selling Price
     medicine.sellingPrice = Number(
@@ -32,246 +36,132 @@ const addMedicine = async (req, res) => {
     // Save Medicine
     const result = await medicineCollection.insertOne(medicine);
 
-    res.status(201).send({
+    return res.status(201).json({
       success: true,
       insertedId: result.insertedId,
       message: "Medicine Added Successfully",
     });
   } catch (error) {
-    res.status(500).send({
+    console.error("Add Medicine Error:", error);
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
 
-// const getMedicines = async (req, res) => {
-//   try {
-//     const search = req.query.search || "";
-//     const page = parseInt(req.query.page) || 1;
-//     const limit = parseInt(req.query.limit) || 5;
-//     const sort = req.query.sort || "asc";
-
-//     const skip = (page - 1) * limit;
-
-//     const query = {
-//       $or: [
-//         {
-//           medicineName: {
-//             $regex: search,
-//             $options: "i",
-//           },
-//         },
-//         {
-//           company: {
-//             $regex: search,
-//             $options: "i",
-//           },
-//         },
-
-//         {
-//           genericName: {
-//             $regex: search,
-//             $options: "i",
-//           },
-//         },
-//       ],
-//     };
-
-//     const sortOption = {
-//       medicineName: sort === "asc" ? 1 : -1,
-//     };
-
-//     const medicines = await medicineCollection
-//       .find(query)
-//       .sort(sortOption)
-//       .skip(skip)
-//       .limit(limit)
-//       .toArray();
-
-//     const total = await medicineCollection.countDocuments(query);
-
-//     res.send({
-//       medicines,
-//       total,
-//       page,
-//       totalPages: Math.ceil(total / limit),
-//     });
-//   } catch (error) {
-//     res.status(500).send({
-//       message: error.message,
-//     });
-//   }
-// };
-
+// ==========================================
+// 2. GET ALL MEDICINES (Search & Filter)
+// ==========================================
 const getMedicines = async (req, res) => {
   try {
-    const search = req.query.search || "";
-    const company = req.query.company || "";
+    const medicineCollection = getMedicineCollection();
+
+    const search = (req.query.search || "").trim();
+    const company = (req.query.company || "").trim();
     const sort = req.query.sort || "asc";
 
-    // =========================
     // Base Query
-    // =========================
-
     const query = {};
 
-    // =========================
-    // Search Filter
-    // =========================
-
-    if (search.trim()) {
+    // Search Filter (Case-insensitive)
+    if (search) {
       query.$or = [
-        {
-          medicineName: {
-            $regex: search.trim(),
-            $options: "i",
-          },
-        },
-        {
-          company: {
-            $regex: search.trim(),
-            $options: "i",
-          },
-        },
-        {
-          genericName: {
-            $regex: search.trim(),
-            $options: "i",
-          },
-        },
+        { medicineName: { $regex: search, $options: "i" } },
+        { company: { $regex: search, $options: "i" } },
+        { genericName: { $regex: search, $options: "i" } },
       ];
     }
 
-    // =========================
     // Company Filter
-    // =========================
-
-    if (company.trim()) {
+    if (company) {
       query.company = {
-        $regex: `^${company.trim()}$`,
+        $regex: `^${company}$`,
         $options: "i",
       };
     }
 
-    // =========================
-    // Sort
-    // =========================
-
+    // Sort Option
     const sortOption = {
       medicineName: sort === "asc" ? 1 : -1,
     };
 
-    // =========================
-    // Get Medicines
-    // =========================
-
+    // Get Medicines (Vercel মেমরি বাঁচানোর জন্য max 300 লিমিট রাখা হলো)
     const medicines = await medicineCollection
       .find(query)
       .sort(sortOption)
+      .limit(300)
       .toArray();
 
-    res.send({
+    return res.status(200).json({
       success: true,
+      count: medicines.length,
       medicines,
     });
   } catch (error) {
     console.error("Get Medicines Error:", error);
-
-    res.status(500).send({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
 
+// ==========================================
+// 3. GET SINGLE MEDICINE BY ID
+// ==========================================
 const getSingleMedicine = async (req, res) => {
   try {
+    const medicineCollection = getMedicineCollection();
     const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Medicine ID format",
+      });
+    }
 
     const medicine = await medicineCollection.findOne({
       _id: new ObjectId(id),
     });
 
-    res.send(medicine);
-  } catch (error) {
-    res.status(500).send({
-      message: error.message,
-    });
-  }
-};
-const deleteMedicine = async (req, res) => {
-  try {
-    const id = req.params.id;
+    if (!medicine) {
+      return res.status(404).json({
+        success: false,
+        message: "Medicine not found",
+      });
+    }
 
-    const result = await medicineCollection.deleteOne({
-      _id: new ObjectId(id),
-    });
-
-    res.send(result);
+    return res.status(200).json(medicine);
   } catch (error) {
-    res.status(500).send({
+    console.error("Get Single Medicine Error:", error);
+    return res.status(500).json({
+      success: false,
       message: error.message,
     });
   }
 };
 
-// const getMedicines = async (req, res) => {
-//   try {
-//     const search = req.query.search || "";
-//     const page = parseInt(req.query.page) || 1;
-//     const limit = parseInt(req.query.limit) || 5;
-//     const sort = req.query.sort || "asc";
-
-//     const skip = (page - 1) * limit;
-
-//     const query = {};
-
-//     if (search) {
-//       query.medicineName = {
-//         $regex: search,
-//         $options: "i",
-//       };
-//     }
-
-//     const medicines = await medicineCollection
-//       .find(query)
-//       .sort({
-//         medicineName: sort === "asc" ? 1 : -1,
-//       })
-//       .skip(skip)
-//       .limit(limit)
-//       .toArray();
-
-//     const total = await medicineCollection.countDocuments(query);
-
-//     res.send({
-//       medicines,
-//       total,
-//       page,
-//       totalPages: Math.ceil(total / limit),
-//     });
-//   } catch (error) {
-//     console.log(error);
-
-//     res.status(500).send({
-//       message: error.message,
-//     });
-//   }
-// };
+// ==========================================
+// 4. UPDATE MEDICINE
+// ==========================================
 const updateMedicine = async (req, res) => {
   try {
+    const medicineCollection = getMedicineCollection();
     const id = req.params.id;
 
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Medicine ID format",
+      });
+    }
+
     const medicine = { ...req.body };
+    delete medicine._id; // _id কখনই মডিফাই করা যাবে না
 
-    // MongoDB _id update করা যাবে না
-    delete medicine._id;
-
-    // ==========================================
-    // NUMBER CONVERSION
-    // ==========================================
-
+    // Number Conversion
     const purchasePrice = Number(medicine.purchasePrice) || 0;
     const profitPercent = Number(medicine.profitPercent) || 0;
     const mrpePrice = Number(medicine.mrpePrice) || 0;
@@ -279,16 +169,8 @@ const updateMedicine = async (req, res) => {
     const stock = Number(medicine.stock) || 0;
     const boxQuantity = Number(medicine.boxQuantity) || 0;
 
-    // ==========================================
-    // SELLING PRICE
-    // MRP - BIKRI/DISCOUNT %
-    // ==========================================
-
+    // Selling Price Calculation
     const sellingPrice = mrpePrice - (mrpePrice * bikriPercent) / 100;
-
-    // ==========================================
-    // SAVE CLEAN DATA
-    // ==========================================
 
     medicine.purchasePrice = purchasePrice;
     medicine.profitPercent = profitPercent;
@@ -296,34 +178,22 @@ const updateMedicine = async (req, res) => {
     medicine.bikriPercent = bikriPercent;
     medicine.stock = stock;
     medicine.boxQuantity = boxQuantity;
-
     medicine.sellingPrice = Number(sellingPrice.toFixed(2));
-
-    // ==========================================
-    // UPDATE DATABASE
-    // ==========================================
+    medicine.updatedAt = new Date();
 
     const result = await medicineCollection.updateOne(
-      {
-        _id: new ObjectId(id),
-      },
-      {
-        $set: medicine,
-      },
+      { _id: new ObjectId(id) },
+      { $set: medicine },
     );
 
-    // ==========================================
-    // RESPONSE
-    // ==========================================
-
     if (result.matchedCount === 0) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Medicine not found",
       });
     }
 
-    res.send({
+    return res.status(200).json({
       success: true,
       message: "Medicine updated successfully",
       sellingPrice: medicine.sellingPrice,
@@ -331,8 +201,47 @@ const updateMedicine = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Medicine Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
-    res.status(500).send({
+// ==========================================
+// 5. DELETE MEDICINE
+// ==========================================
+const deleteMedicine = async (req, res) => {
+  try {
+    const medicineCollection = getMedicineCollection();
+    const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Medicine ID format",
+      });
+    }
+
+    const result = await medicineCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Medicine not found to delete",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Medicine deleted successfully",
+      result,
+    });
+  } catch (error) {
+    console.error("Delete Medicine Error:", error);
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
