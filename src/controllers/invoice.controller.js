@@ -1,27 +1,32 @@
 const { client } = require("../config/db");
 const { ObjectId } = require("mongodb");
 
-const database = client.db("medpharmDB");
-
-const invoiceCollection = database.collection("invoices");
+// নিরাপদ কালেকশন ফাংশন
+const getInvoiceCollection = () => {
+  return client.db("medpharmDB").collection("invoices");
+};
 
 // ======================================
-// Get All Invoices
+// 1. Get All Invoices
 // ======================================
-
 const getAllInvoices = async (req, res) => {
   try {
+    const invoiceCollection = getInvoiceCollection();
+
     const invoices = await invoiceCollection
       .find()
       .sort({ createdAt: -1 })
+      .limit(300) // Vercel মেমরি ক্র্যাশ ঠেকাতে সর্বোচ্চ ৩০০ ইনভয়েস
       .toArray();
 
-    res.send({
+    return res.status(200).json({
       success: true,
+      count: invoices.length,
       invoices,
     });
   } catch (error) {
-    res.status(500).send({
+    console.error("Get All Invoices Error:", error);
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -29,30 +34,38 @@ const getAllInvoices = async (req, res) => {
 };
 
 // ======================================
-// Get Invoice By ID
+// 2. Get Invoice By ID
 // ======================================
-
 const getSingleInvoice = async (req, res) => {
   try {
+    const invoiceCollection = getInvoiceCollection();
     const id = req.params.id;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Invoice ID format",
+      });
+    }
 
     const invoice = await invoiceCollection.findOne({
       _id: new ObjectId(id),
     });
 
     if (!invoice) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
         message: "Invoice Not Found",
       });
     }
 
-    res.send({
+    return res.status(200).json({
       success: true,
       invoice,
     });
   } catch (error) {
-    res.status(500).send({
+    console.error("Get Single Invoice Error:", error);
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -60,12 +73,19 @@ const getSingleInvoice = async (req, res) => {
 };
 
 // ======================================
-// Get Customer Invoices
+// 3. Get Customer Invoices
 // ======================================
-
 const getCustomerInvoices = async (req, res) => {
   try {
+    const invoiceCollection = getInvoiceCollection();
     const email = req.params.email;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer email is required",
+      });
+    }
 
     const invoices = await invoiceCollection
       .find({
@@ -74,12 +94,13 @@ const getCustomerInvoices = async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
 
-    res.send({
+    return res.status(200).json({
       success: true,
       invoices,
     });
   } catch (error) {
-    res.status(500).send({
+    console.error("Get Customer Invoices Error:", error);
+    return res.status(500).json({
       success: false,
       message: error.message,
     });

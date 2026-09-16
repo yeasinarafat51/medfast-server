@@ -1,44 +1,53 @@
 const { client } = require("../config/db");
 
-const database = client.db("medpharmDB");
-
-const medicineCollection = database.collection("medicines");
-const orderCollection = database.collection("orders");
-const userCollection = database.collection("users");
+// নিরাপদ কালেকশন ফাংশন
+const getCollections = () => {
+  const db = client.db("medpharmDB");
+  return {
+    medicineCollection: db.collection("medicines"),
+    orderCollection: db.collection("orders"),
+    userCollection: db.collection("users"),
+  };
+};
 
 const getOrderRevenue = (order) => {
   const grandTotal = Number(order.grandTotal || 0);
-
   return Number.isFinite(grandTotal) ? grandTotal : 0;
 };
 
+// ==========================================
+// 1. ADMIN STATS
+// ==========================================
 const getAdminStats = async (req, res) => {
   try {
-    const totalMedicine = await medicineCollection.countDocuments();
+    const { medicineCollection, orderCollection, userCollection } =
+      getCollections();
 
-    const totalOrders = await orderCollection.countDocuments();
+    // দ্রুত রেসপন্সের জন্য Promise.all ব্যবহার করা হয়েছে
+    const [
+      totalMedicine,
+      totalOrders,
+      totalCustomers,
+      lowStock,
+      revenueResult,
+    ] = await Promise.all([
+      medicineCollection.countDocuments(),
+      orderCollection.countDocuments(),
+      userCollection.countDocuments({ role: "customer" }),
+      medicineCollection.countDocuments({ stock: { $lt: 10 } }),
+      // মেমরিতে সব অর্ডার না এনে MongoDB Engine-এই সরাসরি টোটাল রেভিনিউ হিসাব করা
+      orderCollection
+        .aggregate([
+          { $match: { orderStatus: { $ne: "Cancelled" } } },
+          { $group: { _id: null, total: { $sum: "$grandTotal" } } },
+        ])
+        .toArray(),
+    ]);
 
-    const totalCustomers = await userCollection.countDocuments({
-      role: "customer",
-    });
+    const totalRevenue =
+      revenueResult.length > 0 ? Number(revenueResult[0].total || 0) : 0;
 
-    const lowStock = await medicineCollection.countDocuments({
-      stock: { $lt: 10 },
-    });
-
-    const orders = await orderCollection
-      .find({
-        orderStatus: { $ne: "Cancelled" },
-      })
-      .toArray();
-
-    let totalRevenue = 0;
-
-    orders.forEach((order) => {
-      totalRevenue += getOrderRevenue(order);
-    });
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       totalMedicine,
       totalOrders,
@@ -48,16 +57,21 @@ const getAdminStats = async (req, res) => {
     });
   } catch (error) {
     console.error("Admin Stats Error:", error);
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to load admin dashboard statistics.",
     });
   }
 };
 
+// ==========================================
+// 2. SALES REPORT
+// ==========================================
 const getSalesReport = async (req, res) => {
   try {
+    const { orderCollection } = getCollections();
+
+    // সাম্প্রতিক ৫০০টি ভ্যালিড অর্ডার নিয়ে দ্রুত রিপোর্ট তৈরি
     const orders = await orderCollection
       .find({
         orderStatus: { $ne: "Cancelled" },
@@ -65,6 +79,7 @@ const getSalesReport = async (req, res) => {
       .sort({
         orderDate: -1,
       })
+      .limit(500)
       .toArray();
 
     let totalRevenue = 0;
@@ -72,25 +87,18 @@ const getSalesReport = async (req, res) => {
     let monthRevenue = 0;
 
     const now = new Date();
-
     const currentDate = now.toDateString();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
     orders.forEach((order) => {
       const price = getOrderRevenue(order);
-
       totalRevenue += price;
 
-      if (!order.orderDate) {
-        return;
-      }
+      if (!order.orderDate) return;
 
       const orderDate = new Date(order.orderDate);
-
-      if (Number.isNaN(orderDate.getTime())) {
-        return;
-      }
+      if (Number.isNaN(orderDate.getTime())) return;
 
       if (orderDate.toDateString() === currentDate) {
         todayRevenue += price;
@@ -104,7 +112,7 @@ const getSalesReport = async (req, res) => {
       }
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       totalRevenue,
       todayRevenue,
@@ -113,16 +121,20 @@ const getSalesReport = async (req, res) => {
     });
   } catch (error) {
     console.error("Sales Report Error:", error);
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to load sales report.",
     });
   }
 };
 
+// ==========================================
+// 3. RECENT ORDERS
+// ==========================================
 const getRecentOrders = async (req, res) => {
   try {
+    const { orderCollection } = getCollections();
+
     const orders = await orderCollection
       .find({})
       .sort({
@@ -131,14 +143,13 @@ const getRecentOrders = async (req, res) => {
       .limit(10)
       .toArray();
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       orders,
     });
   } catch (error) {
     console.error("Recent Orders Error:", error);
-
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to load recent orders.",
     });
