@@ -321,8 +321,138 @@ const getSingleOrder = async (req, res) => {
   }
 };
 
-// getOrderById ফাংশনটিকেও getSingleOrder-এর সাথে সামঞ্জস্য রাখা হয়েছে
 const getOrderById = getSingleOrder;
+
+// ======================================
+// 7. Return/Refund Product & Update Invoice + Restock
+// ======================================
+const returnOrderItem = async (req, res) => {
+  try {
+    const { orderCollection, invoiceCollection, medicineCollection } =
+      getCollections();
+    const { id } = req.params;
+    const { medicineId, returnQuantity } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Order ID format",
+      });
+    }
+
+    const qtyToReturn = Math.max(1, Number(returnQuantity || 1));
+
+    const order = await orderCollection.findOne({ _id: new ObjectId(id) });
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // অর্ডারে আইটেমটি খোঁজা
+    const itemIndex = order.items.findIndex(
+      (item) => String(item.medicineId) === String(medicineId),
+    );
+
+    if (itemIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: "Medicine not found in this order",
+      });
+    }
+
+    const currentItem = order.items[itemIndex];
+    if (qtyToReturn > currentItem.quantity) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot return ${qtyToReturn} units. Customer only bought ${currentItem.quantity} units.`,
+      });
+    }
+
+    // ১. অর্ডারের আইটেম তালিকা আপডেট
+    if (currentItem.quantity === qtyToReturn) {
+      // যদি পুরো কোয়ান্টিটিই রিটার্ন হয়ে যায়, তবে আইটেমটি অর্ডার থেকে রিমুভ
+      order.items.splice(itemIndex, 1);
+    } else {
+      // নির্দিষ্ট পরিমাণ কমানো
+      currentItem.quantity -= qtyToReturn;
+      currentItem.totalPrice = Number(
+        (currentItem.quantity * currentItem.unitPrice).toFixed(2),
+      );
+      if (currentItem.purchasePrice) {
+        currentItem.purchaseAmount = Number(
+          (currentItem.quantity * currentItem.purchasePrice).toFixed(2),
+        );
+        currentItem.profit = Number(
+          (currentItem.totalPrice - currentItem.purchaseAmount).toFixed(2),
+        );
+      }
+    }
+
+    // ২. নতুন Grand Total গণনা
+    const newGrandTotal = order.items.reduce(
+      (sum, it) => sum + Number(it.totalPrice || it.unitPrice * it.quantity),
+      0,
+    );
+    const updatedGrandTotal = Number(newGrandTotal.toFixed(2));
+
+    // ৩. অর্ডার ডাটাবেজে আপডেট
+    await orderCollection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          items: order.items,
+          grandTotal: updatedGrandTotal,
+          updatedAt: new Date(),
+        },
+      },
+    );
+
+    // ৪. সংশ্লিষ্ট Invoice কালেকশনে আপডেট
+    if (order.invoiceNo) {
+      await invoiceCollection.updateOne(
+        { invoiceNo: order.invoiceNo },
+        {
+          $set: {
+            items: order.items.map((it) => ({
+              medicineId: it.medicineId,
+              medicineName: it.medicineName,
+              company: it.company,
+              quantity: it.quantity,
+              unitPrice: it.unitPrice,
+              total: it.totalPrice,
+            })),
+            subtotal: updatedGrandTotal,
+            grandTotal: updatedGrandTotal,
+            updatedAt: new Date(),
+          },
+        },
+      );
+    }
+
+    // ৫. মেডিসিন স্টকে ফেরত যোগ করা (Restock)
+    if (ObjectId.isValid(medicineId)) {
+      await medicineCollection.updateOne(
+        { _id: new ObjectId(medicineId) },
+        { $inc: { stock: qtyToReturn } },
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully returned ${qtyToReturn} units of ${currentItem.medicineName}. Invoice and stock updated!`,
+      updatedGrandTotal,
+      remainingItems: order.items,
+    });
+  } catch (error) {
+    console.error("Return Order Item Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 module.exports = {
   createOrder,
@@ -332,4 +462,5 @@ module.exports = {
   getInvoiceByNumber,
   getOrderById,
   getSingleOrder,
+  returnOrderItem, // <--- এক্সপোর্ট করা হয়েছে
 };
