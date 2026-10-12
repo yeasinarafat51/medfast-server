@@ -12,7 +12,7 @@ const dashboardRoutes = require("./routes/dashboard.routes");
 const sliderRoutes = require("./routes/slider.routes");
 const specialOfferRoutes = require("./routes/specialOfferRoutes");
 const profitRoutes = require("./routes/profit.routes");
-
+const headlineRoutes = require("./routes/headline.routes");
 const app = express();
 
 // =======================================================
@@ -92,7 +92,7 @@ app.use("/api/test", testRoutes);
 app.use("/api/sliders", sliderRoutes);
 app.use("/api/special-offers", specialOfferRoutes);
 app.use("/api/profit", profitRoutes);
-
+app.use("/api/headlines", headlineRoutes);
 // =======================================================
 // 5. 404 HANDLER
 // =======================================================
