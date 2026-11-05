@@ -223,11 +223,15 @@ const getMyOrders = async (req, res) => {
 // ======================================
 // 4. Update Order Status
 // ======================================
+// ======================================
+// 4. Update Order Status, Payment & Due
+// ======================================
 const updateOrderStatus = async (req, res) => {
   try {
     const { orderCollection } = getCollections();
     const id = req.params.id;
-    const { orderStatus } = req.body;
+    const { orderStatus, paymentStatus, paidAmount, dueAmount, dueNote } =
+      req.body;
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -236,13 +240,22 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
+    const updateDoc = {};
+    if (orderStatus !== undefined) updateDoc.orderStatus = orderStatus;
+    if (paymentStatus !== undefined) updateDoc.paymentStatus = paymentStatus;
+    if (paidAmount !== undefined) updateDoc.paidAmount = Number(paidAmount);
+    if (dueAmount !== undefined) updateDoc.dueAmount = Number(dueAmount);
+    if (dueNote !== undefined) updateDoc.dueNote = dueNote;
+    updateDoc.updatedAt = new Date();
+
     const result = await orderCollection.updateOne(
       { _id: new ObjectId(id) },
-      { $set: { orderStatus } },
+      { $set: updateDoc },
     );
 
     return res.status(200).json({
       success: true,
+      message: "Order & Due Info Updated Successfully",
       result,
     });
   } catch (error) {
