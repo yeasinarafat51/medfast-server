@@ -168,19 +168,21 @@ const createOrder = async (req, res) => {
 };
 
 // ======================================
-// 2. Get All Orders
+// 2. Get All Orders (ALL TIME - কোনো লিমিট ছাড়া সব অর্ডার আসবে)
 // ======================================
 const getOrders = async (req, res) => {
   try {
     const { orderCollection } = getCollections();
+
+    // ✅ এখানে .limit(200) বাদ দেওয়া হয়েছে, তাই আগস্ট, সেপ্টেম্বর সহ All Time এর সব অর্ডার আসবে!
     const orders = await orderCollection
-      .find()
-      .sort({ orderDate: -1 })
-      .limit(200)
+      .find({})
+      .sort({ orderDate: -1, createdAt: -1 })
       .toArray();
 
     return res.status(200).json({
       success: true,
+      count: orders.length,
       orders,
     });
   } catch (error) {
@@ -202,7 +204,7 @@ const getMyOrders = async (req, res) => {
 
     const orders = await orderCollection
       .find({ customerEmail: email })
-      .sort({ orderDate: -1 })
+      .sort({ orderDate: -1, createdAt: -1 })
       .toArray();
 
     return res.status(200).json({
@@ -372,10 +374,8 @@ const returnOrderItem = async (req, res) => {
 
     // ১. অর্ডারের আইটেম তালিকা আপডেট
     if (currentItem.quantity === qtyToReturn) {
-      // যদি পুরো কোয়ান্টিটিই রিটার্ন হয়ে যায়, তবে আইটেমটি অর্ডার থেকে রিমুভ
       order.items.splice(itemIndex, 1);
     } else {
-      // নির্দিষ্ট পরিমাণ কমানো
       currentItem.quantity -= qtyToReturn;
       currentItem.totalPrice = Number(
         (currentItem.quantity * currentItem.unitPrice).toFixed(2),
@@ -462,5 +462,5 @@ module.exports = {
   getInvoiceByNumber,
   getOrderById,
   getSingleOrder,
-  returnOrderItem, // <--- এক্সপোর্ট করা হয়েছে
+  returnOrderItem,
 };
