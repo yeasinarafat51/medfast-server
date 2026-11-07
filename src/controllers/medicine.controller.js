@@ -51,7 +51,7 @@ const addMedicine = async (req, res) => {
 };
 
 // ==========================================
-// 2. GET ALL MEDICINES (Search & Filter)
+// 2. GET ALL MEDICINES (Search & Filter - ⚡ UNLIMITED)
 // ==========================================
 const getMedicines = async (req, res) => {
   try {
@@ -86,12 +86,19 @@ const getMedicines = async (req, res) => {
       medicineName: sort === "asc" ? 1 : -1,
     };
 
-    // Get Medicines (Vercel মেমরি বাঁচানোর জন্য max 300 লিমিট রাখা হলো)
-    const medicines = await medicineCollection
-      .find(query)
-      .sort(sortOption)
-      .limit(300)
-      .toArray();
+    // ⚡ UNLIMITED: .limit(300) সম্পূর্ণ বাদ দেওয়া হলো
+    // যদি রিকোয়েস্টে কোনো স্পেসিফিক limit চাওয়া হয় কেবল তখনই limit হবে, অন্যথায় ডাটাবেজের সব মেডিসিন আসবে!
+    let cursor = medicineCollection.find(query).sort(sortOption);
+
+    if (
+      req.query.limit &&
+      !isNaN(Number(req.query.limit)) &&
+      Number(req.query.limit) > 0
+    ) {
+      cursor = cursor.limit(Number(req.query.limit));
+    }
+
+    const medicines = await cursor.toArray();
 
     return res.status(200).json({
       success: true,
