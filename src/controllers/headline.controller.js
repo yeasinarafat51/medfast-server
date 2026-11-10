@@ -3,7 +3,7 @@ const { ObjectId } = require("mongodb");
 
 // MongoDB medpharmDB কালেকশন হেল্পার ফাংশন
 const getHeadlineCollection = () => {
-  return client.db("medpharmDB").collection("headlines");
+  return client.db("medfast").collection("headlines");
 };
 
 // =====================================================

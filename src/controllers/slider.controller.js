@@ -3,7 +3,7 @@ const { ObjectId } = require("mongodb");
 
 // নিরাপদ কালেকশন হেল্পার ফাংশন
 const getSliderCollection = () => {
-  return client.db("medpharmDB").collection("sliders");
+  return client.db("medfast").collection("sliders");
 };
 
 // =====================================================

@@ -2,7 +2,7 @@ const { client } = require("../config/db");
 
 // নিরাপদ কালেকশন ফাংশন
 const getCollections = () => {
-  const db = client.db("medpharmDB");
+  const db = client.db("medfast");
   return {
     medicineCollection: db.collection("medicines"),
     orderCollection: db.collection("orders"),

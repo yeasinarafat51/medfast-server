@@ -48,7 +48,7 @@ async function connectDB() {
 }
 
 function getCollection(collectionName) {
-  return cachedClient.db("medpharmDB").collection(collectionName);
+  return cachedClient.db("medfast").collection(collectionName);
 }
 
 module.exports = connectDB;
